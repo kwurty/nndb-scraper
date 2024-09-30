@@ -1,6 +1,7 @@
 import requests
 import csv
 import json
+import mysql.connector
 
 from bs4 import BeautifulSoup
 
@@ -31,6 +32,48 @@ def parse_html(response):
         table = tables[5]
         return table
 
+def format_name(name):
+    # Define suffixes to check for
+    suffixes = {'Jr.', 'Sr.', 'II', 'III', 'IV', 'V'}
+    
+    # Remove any leading or trailing whitespace
+    name = name.strip()
+    
+    # Split the full name into parts
+    name_parts = name.split(',')
+    
+    # Handle the case where there's a suffix
+    if len(name_parts) > 1:
+        # Extract the name before the comma
+        name_part = name_parts[0].strip()
+        suffix_part = name_parts[1].strip()
+        # Check if the suffix is valid
+        if any(suffix in suffix_part for suffix in suffixes):
+            # Handle the last name extraction
+            suffixes_found = [suffix for suffix in suffixes if suffix in suffix_part]
+            last_name = name_part.split()[-1]  # Take the last part before the comma
+        else:
+            last_name = name_part.split()[-1]
+    else:
+        name_part = name_parts[0].strip()
+        last_name = name_part.split()[-1]
+
+    # Split the name part into individual components
+    name_parts = name_part.split()
+    
+    # Handle the case where there are no names
+    if not name_parts:
+        return None, None
+
+    # The first part is considered the first name
+    first_name = name_parts[0]
+
+    # If the first name is an initial, return only the initial
+    if len(first_name) == 2 and first_name[1] == '.':
+        first_name = first_name[0]  # Keep only the initial
+    
+    return first_name, last_name
+
 def parse_table(table):
     persons = []
     rows = table.find_all('tr')
@@ -40,8 +83,11 @@ def parse_table(table):
         description = row.find_all('td')[2].text
         birth = row.find_all('td')[3].text
         death = row.find_all('td')[4].text
+        firstname, lastname = format_name(name)
         persons.append({
             'Name': name,
+            'First_Name': firstname,
+            'Last_Name': lastname,
             'Occupation': occupation,
             'Description': description,
             'Birth': birth,
@@ -49,6 +95,53 @@ def parse_table(table):
         })
     return persons
 
+def insert_data(data):
+    # MySQL database connection configuration
+    db_config = {
+        'user': 
+        'password': ,
+        'host': 
+        'database': 
+    }
+    connection = None
+    try:
+        # Connect to the MySQL database
+        connection = mysql.connector.connect(**db_config)
+        cursor = connection.cursor()
+
+        # SQL insert statement
+        insert_query = """
+        INSERT INTO People (Name, First_Name, Last_Name, Occupation, Description, Birth, Death)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+
+        # Loop through each item in the data
+        for item in data:
+            # Prepare data for insertion
+            values = (
+                item['Name'],
+                item['First_Name'],
+                item['Last_Name'],
+                item['Occupation'],
+                item['Description'],
+                item['Birth'],
+                item['Death']
+            )
+
+            # Execute the insert statement
+            cursor.execute(insert_query, values)
+
+        # Commit the transaction
+        connection.commit()
+        print("Data inserted successfully.")
+
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
 def main():
     filename = 'urls.csv'
     urls = get_urls_from_csv(filename)
